@@ -21,14 +21,6 @@ reports/
 *.part.*
 stock_report.txt
 
-# Screenshots / temporary artifacts
-*.png
-*.jpg
-*.jpeg
-*.webp
-*.gif
-*.b64
-
 # Temporary / experimental scripts
 /tmp/
 tmp_*
