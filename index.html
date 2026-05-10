@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F&O Performance Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --panel-2: #17233a;
+      --text: #e8eefc;
+      --muted: #9db0d1;
+      --border: #243250;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --blue: #60a5fa;
+      --shadow: 0 10px 30px rgba(0,0,0,.28);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #08101d 0%, #0b1020 100%);
+      color: var(--text);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .wrap {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    .sub { color: var(--muted); margin-bottom: 22px; }
+    .panel {
+      background: rgba(18,26,43,.92);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+    .hero {
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+    .upload-zone {
+      border: 1.5px dashed #3a4b74;
+      border-radius: 16px;
+      padding: 22px;
+      background: rgba(255,255,255,.02);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .upload-zone p { margin: 0; color: var(--muted); }
+    .btn {
+      background: linear-gradient(180deg, #2a69ff, #1a56db);
+      color: white;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn.secondary {
+      background: #1a2336;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    input[type=file] { display: none; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+    .card {
+      padding: 18px;
+      min-height: 110px;
+    }
+    .kpi { grid-column: span 3; }
+    .chart-6 { grid-column: span 6; }
+    .chart-8 { grid-column: span 8; }
+    .chart-4 { grid-column: span 4; }
+    .chart-12 { grid-column: span 12; }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .value { font-size: 28px; margin-top: 8px; font-weight: 700; }
+    .small { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .neutral { color: var(--blue); }
+    .section-title { margin: 6px 0 14px; font-size: 18px; }
+    .plot { width: 100%; height: 420px; }
+    .plot.sm { height: 330px; }
+    .insights {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .insight {
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+    }
+    .insight strong { display: block; margin-bottom: 4px; }
+    .status {
+      margin-top: 12px;
+      color: var(--muted);
+      min-height: 20px;
+    }
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    th { color: var(--muted); font-weight: 600; }
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    @media (max-width: 1100px) {
+      .kpi, .chart-6, .chart-8, .chart-4, .chart-12 { grid-column: span 12; }
+      .insights { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel hero">
+      <h1>F&O Performance Dashboard</h1>
+      <div class="sub">Upload your yearly Zerodha <b>tradebook</b> and <b>P&amp;L statement</b> Excel files to generate a dark-mode analytics dashboard.</div>
+      <div class="upload-zone">
+        <div>
+          <p><b>Expected files:</b> yearly Zerodha tradebook and P&amp;L Excel exports such as <code>tradebook-FO_YYYY_YY.xlsx</code> and <code>pnl_YYYY_YY.xlsx</code>.</p>
+          <div class="hint">The parser is designed for Zerodha F&amp;O export formats. If your file layout differs, small parser changes may be needed.</div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <label class="btn" for="files">Upload Excel files</label>
+          <input id="files" type="file" accept=".xlsx,.xls,.json" multiple />
+          <button class="btn secondary" id="settingsBtn">Settings</button>
+          <button class="btn secondary" id="saveJsonBtn">Save JSON</button>
+          <label class="btn secondary" for="jsonFile">Load JSON</label>
+          <input id="jsonFile" type="file" accept=".json" />
+          <button class="btn secondary" id="loadSample" style="visibility:hidden;">Load sample settings</button>
+        </div>
+      </div>
+      <div id="settingsPanel" class="panel" style="display:none; margin-top:14px; padding:16px; border-radius:16px;">
+        <div class="section-title" style="margin-top:0;">Investment Amount Settings</div>
+        <div class="hint">Enter actual invested capital for each financial year. This value will be used for Invested and Return %.</div>
+        <div class="table-wrap" style="margin-top:10px;">
+          <table>
+            <thead>
+              <tr>
+                <th>FY</th>
+                <th>Invested Amount</th>
+              </tr>
+            </thead>
+            <tbody id="settingsBody"></tbody>
+          </table>
+        </div>
+        <div class="section-title" style="margin-top:18px;">Key Event Annotations</div>
+        <div class="hint">Add important dates per FY like India election, Iran war, budget, Fed meeting, etc. Use one event per line in this format: <code>YYYY-MM-DD | Label | green</code> or <code>YYYY-MM-DD | Label | red</code></div>
+        <div class="table-wrap" style="margin-top:10px;">
+          <table>
+            <thead>
+              <tr>
+                <th>FY</th>
+                <th>Key Dates</th>
+              </tr>
+            </thead>
+            <tbody id="eventSettingsBody"></tbody>
+          </table>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+          <button class="btn" id="saveSettings">Save settings</button>
+          <button class="btn secondary" id="clearSettings">Clear saved settings</button>
+        </div>
+      </div>
+      <div id="status" class="status">Waiting for files…</div>
+    </div>
+
+    <div class="grid">
+      <div class="panel card kpi"><div class="label">Years Analysed</div><div class="value" id="kpiYears">—</div><div class="small">Financial years detected</div></div>
+      <div class="panel card kpi"><div class="label">Total Invested</div><div class="value" id="kpiInvested">—</div><div class="small">From manual FY investment settings</div></div>
+      <div class="panel card kpi"><div class="label">Net P&amp;L</div><div class="value" id="kpiNet">—</div><div class="small">Realised profit − charges + other credit</div></div>
+      <div class="panel card kpi"><div class="label">Overall Return</div><div class="value" id="kpiReturn">—</div><div class="small">Net P&amp;L ÷ invested capital</div></div>
+
+      <div class="panel card chart-8">
+        <div class="section-title">Year-wise Profit / Loss</div>
+        <div id="yearlyBar" class="plot"></div>
+      </div>
+      <div class="panel card chart-4">
+        <div class="section-title">Key Insights</div>
+        <div id="insights" class="insights"></div>
+      </div>
+
+      <div class="panel card chart-6">
+        <div class="section-title">Amount Invested vs Net Profit</div>
+        <div id="investVsProfit" class="plot sm"></div>
+      </div>
+      <div class="panel card chart-6">
+        <div class="section-title">Year-wise % Return</div>
+        <div id="returnBar" class="plot sm"></div>
+      </div>
+
+      <div class="panel card chart-12">
+        <div class="section-title">FY Cumulative Profit / Loss</div>
+        <div id="timeChartTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;"></div>
+        <div id="timeChart" class="plot sm"></div>
+      </div>
+
+      <div class="panel card chart-12">
+        <div class="section-title">Profit / Loss Heatmap by Day</div>
+        <div id="heatmapTabs" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;"></div>
+        <div id="heatmap" style="width:100%;"></div>
+      </div>
+
+      <div class="panel card chart-12">
+        <div class="section-title">Year Summary Table</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Invested</th>
+                <th>Turnover</th>
+                <th>Realised P&amp;L</th>
+                <th>Charges</th>
+                <th>Other Credit</th>
+                <th>Net Profit</th>
+                <th>Return %</th>
+                <th>Trading Days</th>
+              </tr>
+            </thead>
+            <tbody id="summaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const plotTheme = {
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: '#e8eefc' },
+      xaxis: { gridcolor: '#23314f', zerolinecolor: '#23314f' },
+      yaxis: { gridcolor: '#23314f', zerolinecolor: '#23314f' },
+      margin: { l: 50, r: 20, t: 20, b: 50 }
+    };
+    let latestAnalytics = null;
+    let latestRawData = null;
+    let selectedHeatmapYear = null;
+    let selectedTimeChartYear = null;
+    const investmentSettings = JSON.parse(localStorage.getItem('fnoInvestmentSettings') || '{}');
+    const eventSettings = JSON.parse(localStorage.getItem('fnoEventSettings') || '{}');
+
+    const currency = (n) => {
+      if (n == null || Number.isNaN(n)) return '—';
+      return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(n);
+    };
+    const money = (n) => {
+      if (n == null || Number.isNaN(n)) return '—';
+      return `₹${currency(n)}`;
+    };
+    const moneyOrMissing = (n) => Number.isFinite(n) ? money(n) : '<span class="small">Missing</span>';
+    const pct = (n) => {
+      if (n == null || Number.isNaN(n)) return '—';
+      return `${n.toFixed(2)}%`;
+    };
+    const setText = (id, value, cls='') => {
+      const el = document.getElementById(id);
+      el.textContent = value;
+      el.className = `value ${cls}`.trim();
+    };
+    const num = (v) => {
+      if (v == null || v === '') return NaN;
+      if (typeof v === 'number') return v;
+      const s = String(v).replace(/[,₹%\s]/g, '');
+      const n = Number(s);
+      return Number.isFinite(n) ? n : NaN;
+    };
+    const parseExcelDate = (v) => {
+      if (v == null || v === '') return null;
+      if (v instanceof Date && !isNaN(v)) return v;
+      if (typeof v === 'number') {
+        const d = XLSX.SSF.parse_date_code(v);
+        return d ? new Date(d.y, d.m - 1, d.d) : null;
+      }
+      const s = String(v).trim();
+      const direct = new Date(s);
+      if (!isNaN(direct)) return direct;
+      const m = s.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+      return null;
+    };
+    const fyFromDate = (d) => {
+      const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+      return `${y}-${String((y + 1) % 100).padStart(2, '0')}`;
+    };
+    const dayName = (d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+    const monthName = (d) => d.toLocaleString('en-IN', { month: 'short', year: 'numeric' });
+
+    function readFileAsArrayBuffer(file) {
+      return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = reject;
+        fr.readAsArrayBuffer(file);
+      });
+    }
+
+    function sheetToAoA(sheet) {
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+    }
+
+    function detectKind(fileName) {
+      const n = fileName.toLowerCase();
+      if (n.includes('tradebook')) return 'tradebook';
+      if (n.includes('pnl')) return 'pnl';
+      return 'unknown';
+    }
+
+    function parseTradebook(workbook, fileName) {
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = sheetToAoA(sheet);
+      const headerIndex = rows.findIndex(r => r.some(c => String(c || '').trim() === 'Trade Date'));
+      if (headerIndex === -1) throw new Error(`Tradebook header not found in ${fileName}`);
+      const headers = rows[headerIndex].map(v => String(v || '').trim());
+      const dataRows = rows.slice(headerIndex + 1).filter(r => r.some(v => v != null && v !== ''));
+      const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+      const needed = ['Symbol', 'Trade Date', 'Trade Type', 'Quantity', 'Price'];
+      for (const key of needed) if (!(key in idx)) throw new Error(`Missing ${key} in ${fileName}`);
+      const trades = dataRows.map(r => ({
+        symbol: r[idx['Symbol']],
+        tradeDate: parseExcelDate(r[idx['Trade Date']]),
+        tradeType: String(r[idx['Trade Type']] || '').toLowerCase().trim(),
+        quantity: num(r[idx['Quantity']]),
+        price: num(r[idx['Price']]),
+        orderTime: r[idx['Order Execution Time']] ? new Date(r[idx['Order Execution Time']]) : null,
+        tradeId: num(r[idx['Trade ID']])
+      })).filter(t => t.tradeDate && t.symbol && t.tradeType && Number.isFinite(t.quantity) && Number.isFinite(t.price));
+      return trades;
+    }
+
+    function parsePnl(workbook, fileName) {
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = sheetToAoA(sheet);
+      let charges = NaN, other = NaN, realised = NaN, unrealised = NaN;
+
+      const normalizedRows = rows.map((row) => {
+        const cells = row.slice(0, 6);
+        const labels = cells
+          .map(cell => String(cell ?? '').trim())
+          .filter(text => text && Number.isNaN(num(text)));
+        const numericValues = cells
+          .map(cell => num(cell))
+          .filter(v => Number.isFinite(v));
+        const label = labels.join(' ').replace(/\s+/g, ' ').trim();
+        const lower = label.toLowerCase();
+        const value = numericValues.length ? numericValues[numericValues.length - 1] : NaN;
+        return { row, label, lower, value };
+      });
+
+      const summaryIndex = normalizedRows.findIndex(r => r.lower.includes('summary'));
+      const scanRows = summaryIndex >= 0 ? normalizedRows.slice(summaryIndex + 1, summaryIndex + 12) : normalizedRows;
+
+      for (const r of scanRows) {
+        if (r.lower === 'charges' && Number.isFinite(r.value) && !Number.isFinite(charges)) charges = r.value;
+        if (r.lower === 'other credit & debit' && Number.isFinite(r.value) && !Number.isFinite(other)) other = r.value;
+        if ((r.lower === 'realized p&l' || r.lower === 'realised p&l') && Number.isFinite(r.value) && !Number.isFinite(realised)) realised = r.value;
+        if ((r.lower === 'unrealized p&l' || r.lower === 'unrealised p&l') && Number.isFinite(r.value) && !Number.isFinite(unrealised)) unrealised = r.value;
+      }
+
+      let year = null;
+      const titleRow = normalizedRows.find(r => r.lower.includes('p&l statement for f&o from'));
+      if (titleRow) {
+        const mTitle = titleRow.label.match(/from\s+(\d{4})-(\d{2})-(\d{2})\s+to\s+(\d{4})-(\d{2})-(\d{2})/i);
+        if (mTitle) {
+          const startDate = new Date(Number(mTitle[1]), Number(mTitle[2]) - 1, Number(mTitle[3]));
+          year = fyFromDate(startDate);
+        }
+      }
+      if (!year) {
+        const m = fileName.match(/(20\d{2})[-_](\d{2})/);
+        year = m ? `${m[1]}-${m[2]}` : null;
+      }
+      return { year, charges, other, realised, unrealised };
+    }
+
+    function dedupeTrades(trades) {
+      const seen = new Map();
+      for (const t of (trades || [])) {
+        const d = parseExcelDate(t.tradeDate);
+        const dateKeyVal = d ? d.toISOString().slice(0, 10) : String(t.tradeDate || '');
+        const key = [
+          t.tradeId ?? '',
+          t.symbol ?? '',
+          dateKeyVal,
+          t.tradeType ?? '',
+          t.quantity ?? '',
+          t.price ?? ''
+        ].join('|');
+        if (!seen.has(key)) {
+          seen.set(key, {
+            ...t,
+            tradeDate: d,
+            orderTime: t.orderTime ? new Date(t.orderTime) : null
+          });
+        }
+      }
+      return [...seen.values()];
+    }
+
+    function sortTrades(trades) {
+      return (trades || []).slice().sort((a, b) => {
+        const ta = a.tradeDate?.getTime() || 0;
+        const tb = b.tradeDate?.getTime() || 0;
+        if (ta !== tb) return ta - tb;
+        const oa = a.orderTime?.getTime() || 0;
+        const ob = b.orderTime?.getTime() || 0;
+        if (oa !== ob) return oa - ob;
+        return (a.tradeId || 0) - (b.tradeId || 0);
+      });
+    }
+
+    function computeDailyRealized(trades) {
+      const queues = new Map();
+      const daily = new Map();
+      const getQ = (symbol, side) => {
+        const key = `${symbol}__${side}`;
+        if (!queues.has(key)) queues.set(key, []);
+        return queues.get(key);
+      };
+      const addDaily = (dateKey, val) => daily.set(dateKey, (daily.get(dateKey) || 0) + val);
+
+      sortTrades(trades).forEach(t => {
+        const keyDate = t.tradeDate.toISOString().slice(0, 10);
+        let remaining = t.quantity;
+        if (t.tradeType === 'buy') {
+          const shorts = getQ(t.symbol, 'short');
+          while (remaining > 1e-9 && shorts.length) {
+            const lot = shorts[0];
+            const matched = Math.min(remaining, lot.qty);
+            addDaily(keyDate, (lot.price - t.price) * matched);
+            lot.qty -= matched;
+            remaining -= matched;
+            if (lot.qty <= 1e-9) shorts.shift();
+          }
+          if (remaining > 1e-9) getQ(t.symbol, 'long').push({ qty: remaining, price: t.price });
+        } else if (t.tradeType === 'sell') {
+          const longs = getQ(t.symbol, 'long');
+          while (remaining > 1e-9 && longs.length) {
+            const lot = longs[0];
+            const matched = Math.min(remaining, lot.qty);
+            addDaily(keyDate, (t.price - lot.price) * matched);
+            lot.qty -= matched;
+            remaining -= matched;
+            if (lot.qty <= 1e-9) longs.shift();
+          }
+          if (remaining > 1e-9) getQ(t.symbol, 'short').push({ qty: remaining, price: t.price });
+        }
+      });
+      return daily;
+    }
+
+    function computeGlobalDailyRealized(allTrades) {
+      const queues = new Map();
+      const dailyByFy = new Map();
+      const getQ = (symbol, side) => {
+        const key = `${symbol}__${side}`;
+        if (!queues.has(key)) queues.set(key, []);
+        return queues.get(key);
+      };
+      const addDaily = (fy, dateKeyVal, val) => {
+        if (!dailyByFy.has(fy)) dailyByFy.set(fy, new Map());
+        const fyMap = dailyByFy.get(fy);
+        fyMap.set(dateKeyVal, (fyMap.get(dateKeyVal) || 0) + val);
+      };
+
+      const mergedTrades = Object.entries(allTrades).flatMap(([_, trades]) =>
+        dedupeTrades((trades || []).map(t => ({ ...t, tradeDate: parseExcelDate(t.tradeDate), orderTime: t.orderTime ? new Date(t.orderTime) : null })))
+      );
+
+      sortTrades(mergedTrades).forEach(t => {
+        const fy = fyFromDate(t.tradeDate);
+        const keyDateVal = t.tradeDate.toISOString().slice(0, 10);
+        let remaining = t.quantity;
+        if (t.tradeType === 'buy') {
+          const shorts = getQ(t.symbol, 'short');
+          while (remaining > 1e-9 && shorts.length) {
+            const lot = shorts[0];
+            const matched = Math.min(remaining, lot.qty);
+            addDaily(fy, keyDateVal, (lot.price - t.price) * matched);
+            lot.qty -= matched;
+            remaining -= matched;
+            if (lot.qty <= 1e-9) shorts.shift();
+          }
+          if (remaining > 1e-9) getQ(t.symbol, 'long').push({ qty: remaining, price: t.price });
+        } else if (t.tradeType === 'sell') {
+          const longs = getQ(t.symbol, 'long');
+          while (remaining > 1e-9 && longs.length) {
+            const lot = longs[0];
+            const matched = Math.min(remaining, lot.qty);
+            addDaily(fy, keyDateVal, (t.price - lot.price) * matched);
+            lot.qty -= matched;
+            remaining -= matched;
+            if (lot.qty <= 1e-9) longs.shift();
+          }
+          if (remaining > 1e-9) getQ(t.symbol, 'short').push({ qty: remaining, price: t.price });
+        }
+      });
+
+      return dailyByFy;
+    }
+
+    function buildAnalytics(allTrades, pnlByYear) {
+      const yearMap = new Map();
+      const dailyGlobal = new Map();
+      const globalDailyByFy = computeGlobalDailyRealized(allTrades);
+
+      Object.entries(allTrades).forEach(([year, trades]) => {
+        trades = dedupeTrades((trades || []).map(t => ({ ...t, tradeDate: parseExcelDate(t.tradeDate), orderTime: t.orderTime ? new Date(t.orderTime) : null })));
+        const daily = globalDailyByFy.get(year) || new Map();
+        const realisedFromTrades = [...daily.values()].reduce((a, b) => a + b, 0);
+        const pnl = pnlByYear[year] || {};
+        const charges = Number.isFinite(pnl.charges) ? pnl.charges : 0;
+        const other = Number.isFinite(pnl.other) ? pnl.other : 0;
+        const realised = Number.isFinite(pnl.realised) ? pnl.realised : realisedFromTrades;
+        const netProfit = realised - charges + other;
+
+        const byDate = [...daily.entries()].map(([date, value]) => ({ date: new Date(date), value }));
+        byDate.forEach(d => dailyGlobal.set(dateKey(d.date), (dailyGlobal.get(dateKey(d.date)) || 0) + d.value));
+
+        const turnover = trades.reduce((sum, t) => sum + (t.quantity * t.price), 0);
+        const invested = Number.isFinite(num(investmentSettings[year])) ? num(investmentSettings[year]) : NaN;
+        const returnPct = invested ? (netProfit / invested) * 100 : NaN;
+
+        yearMap.set(year, {
+          year,
+          invested,
+          turnover,
+          realised,
+          charges,
+          other,
+          netProfit,
+          returnPct,
+          tradingDays: byDate.length,
+          daily: byDate,
+          realisedFromTrades
+        });
+      });
+
+      const years = [...yearMap.values()].sort((a, b) => a.year.localeCompare(b.year));
+      const allDays = [...dailyGlobal.entries()].map(([date, value]) => ({ date: new Date(date), value }));
+      return { years, allDays };
+    }
+
+    function dateKey(d) {
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString().slice(0,10);
+    }
+
+    function bestWorst(data, key='value') {
+      if (!data.length) return { best: null, worst: null };
+      const sorted = data.slice().sort((a,b) => a[key]-b[key]);
+      return { worst: sorted[0], best: sorted[sorted.length - 1] };
+    }
+
+    function renderInsights(years, allDays) {
+      const el = document.getElementById('insights');
+      el.innerHTML = '';
+
+      const monthAgg = new Map();
+      const weekAgg = new Map();
+      allDays.forEach(({ date, value }) => {
+        const mn = monthName(date);
+        monthAgg.set(mn, (monthAgg.get(mn) || 0) + value);
+        const start = new Date(date);
+        start.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+        const wk = start.toISOString().slice(0, 10);
+        weekAgg.set(wk, (weekAgg.get(wk) || 0) + value);
+      });
+
+      const bestDay = allDays.length ? allDays.reduce((a,b) => a.value > b.value ? a : b) : null;
+      const worstDay = allDays.length ? allDays.reduce((a,b) => a.value < b.value ? a : b) : null;
+      const monthStats = [...monthAgg.entries()].map(([name, value]) => ({ name, value }));
+      const weekStats = [...weekAgg.entries()].map(([name, value]) => ({ name, value }));
+      const m = bestWorst(monthStats);
+      const w = bestWorst(weekStats);
+      const y = bestWorst(years, 'netProfit');
+
+      const items = [
+        ['Best trading day', bestDay ? `${bestDay.date.toLocaleDateString('en-IN')} (${money(bestDay.value)})` : '—'],
+        ['Worst trading day', worstDay ? `${worstDay.date.toLocaleDateString('en-IN')} (${money(worstDay.value)})` : '—'],
+        ['Best week', w.best ? `${new Date(w.best.name).toLocaleDateString('en-IN')} (${money(w.best.value)})` : '—'],
+        ['Worst week', w.worst ? `${new Date(w.worst.name).toLocaleDateString('en-IN')} (${money(w.worst.value)})` : '—'],
+        ['Best month', m.best ? `${m.best.name} (${money(m.best.value)})` : '—'],
+        ['Worst month', m.worst ? `${m.worst.name} (${money(m.worst.value)})` : '—'],
+        ['Best year', y.best ? `${y.best.year} (${money(y.best.netProfit)})` : '—'],
+        ['Worst year', y.worst ? `${y.worst.year} (${money(y.worst.netProfit)})` : '—']
+      ];
+
+      items.forEach(([title, value]) => {
+        const div = document.createElement('div');
+        div.className = 'insight';
+        div.innerHTML = `<strong>${title}</strong><div>${value}</div>`;
+        el.appendChild(div);
+      });
+    }
+
+    function renderSummary(years) {
+      const totalInvested = years.reduce((s, r) => s + (Number.isFinite(r.invested) ? r.invested : 0), 0);
+      const totalNet = years.reduce((s, r) => s + (r.netProfit || 0), 0);
+      setText('kpiYears', String(years.length), 'neutral');
+      setText('kpiInvested', totalInvested ? money(totalInvested) : 'Set in Settings', 'neutral');
+      setText('kpiNet', money(totalNet), totalNet >= 0 ? 'positive' : 'negative');
+      setText('kpiReturn', totalInvested ? pct((totalNet / totalInvested) * 100) : 'Set in Settings', totalNet >= 0 ? 'positive' : 'negative');
+
+      document.getElementById('summaryBody').innerHTML = years.map(r => `
+        <tr>
+          <td>${r.year}</td>
+          <td>${Number.isFinite(r.invested) ? money(r.invested) : '<span class="small">Not set</span>'}</td>
+          <td>${money(r.turnover)}</td>
+          <td class="${r.realised >= 0 ? 'positive' : 'negative'}">${money(r.realised)}</td>
+          <td>${moneyOrMissing(r.charges)}</td>
+          <td>${moneyOrMissing(r.other)}</td>
+          <td class="${r.netProfit >= 0 ? 'positive' : 'negative'}">${money(r.netProfit)}</td>
+          <td class="${r.returnPct >= 0 ? 'positive' : 'negative'}">${pct(r.returnPct)}</td>
+          <td>${r.tradingDays}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderHeatmapTabs(years) {
+      const wrap = document.getElementById('heatmapTabs');
+      wrap.innerHTML = '';
+      if (!selectedHeatmapYear && years.length) selectedHeatmapYear = years[0].year;
+      years.forEach(y => {
+        const btn = document.createElement('button');
+        btn.className = 'btn secondary';
+        btn.textContent = y.year;
+        btn.style.opacity = y.year === selectedHeatmapYear ? '1' : '.75';
+        btn.style.borderColor = y.year === selectedHeatmapYear ? '#60a5fa' : 'var(--border)';
+        btn.onclick = () => {
+          selectedHeatmapYear = y.year;
+          renderHeatmapTabs(years);
+          renderYearHeatmap(years.find(r => r.year === selectedHeatmapYear));
+        };
+        wrap.appendChild(btn);
+      });
+    }
+
+    function renderTimeChartTabs(years) {
+      const wrap = document.getElementById('timeChartTabs');
+      wrap.innerHTML = '';
+      if (!selectedTimeChartYear && years.length) selectedTimeChartYear = years[0].year;
+      years.forEach(y => {
+        const btn = document.createElement('button');
+        btn.className = 'btn secondary';
+        btn.textContent = y.year;
+        btn.style.opacity = y.year === selectedTimeChartYear ? '1' : '.75';
+        btn.style.borderColor = y.year === selectedTimeChartYear ? '#60a5fa' : 'var(--border)';
+        btn.onclick = () => {
+          selectedTimeChartYear = y.year;
+          renderTimeChartTabs(years);
+          renderYearTimeChart(years.find(r => r.year === selectedTimeChartYear));
+        };
+        wrap.appendChild(btn);
+      });
+    }
+
+    function renderYearTimeChart(yearRow) {
+      if (!yearRow) return;
+      const sorted = yearRow.daily.slice().sort((a,b) => a.date - b.date);
+      let running = 0;
+      const points = sorted.map(d => {
+        running += d.value;
+        return { x: new Date(d.date), y: running };
+      });
+      if (!points.length) {
+        Plotly.newPlot('timeChart', [], { ...plotTheme }, { responsive: true, displayModeBar: false });
+        return;
+      }
+
+      const withCrossings = [points[0]];
+      for (let i = 1; i < points.length; i++) {
+        const prev = withCrossings[withCrossings.length - 1];
+        const curr = points[i];
+        if ((prev.y < 0 && curr.y > 0) || (prev.y > 0 && curr.y < 0)) {
+          const t = (0 - prev.y) / (curr.y - prev.y);
+          const crossX = new Date(prev.x.getTime() + (curr.x.getTime() - prev.x.getTime()) * t);
+          withCrossings.push({ x: crossX, y: 0 });
+        }
+        withCrossings.push(curr);
+      }
+
+      const x = withCrossings.map(p => p.x);
+      const y = withCrossings.map(p => p.y);
+      const profit = withCrossings.map(p => p.y >= 0 ? p.y : null);
+      const loss = withCrossings.map(p => p.y <= 0 ? p.y : null);
+
+      const tickCount = Math.min(9, x.length);
+      const tickVals = [];
+      const tickText = [];
+      const seen = new Set();
+      if (x.length) {
+        for (let i = 0; i < tickCount; i++) {
+          const idx = Math.round((i * (x.length - 1)) / Math.max(1, tickCount - 1));
+          const dt = x[idx];
+          const key = new Date(dt).toISOString().slice(0, 10);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          tickVals.push(dt);
+          tickText.push(new Date(dt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+        }
+      }
+
+      const eventLines = String(eventSettings[yearRow.year] || '')
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+      const rawSeries = yearRow.daily.slice().sort((a,b) => a.date - b.date);
+      const eventX = [];
+      const eventY = [];
+      const eventText = [];
+      const eventColors = [];
+      for (const line of eventLines) {
+        const parts = line.split('|').map(s => s.trim());
+        const dateStr = parts[0] || '';
+        const label = parts[1] || '';
+        const colorFlag = (parts[2] || 'green').toLowerCase();
+        const eventDate = new Date(dateStr);
+        if (isNaN(eventDate) || !label) continue;
+        let nearest = null;
+        for (const p of rawSeries) {
+          if (!nearest || Math.abs(p.date - eventDate) < Math.abs(nearest.date - eventDate)) nearest = p;
+        }
+        if (!nearest) continue;
+        let accrued = 0;
+        for (const p of rawSeries) {
+          if (p.date <= nearest.date) accrued += p.value;
+        }
+        eventX.push(nearest.date);
+        eventY.push(accrued);
+        eventText.push(`${label}<br>${nearest.date.toLocaleDateString('en-IN')}<br>Accrued P&L: ${money(accrued)}`);
+        eventColors.push(colorFlag === 'red' ? '#ef4444' : '#22c55e');
+      }
+
+      Plotly.newPlot('timeChart', [
+        {
+          x,
+          y: profit,
+          type: 'scatter',
+          mode: 'lines',
+          connectgaps: false,
+          line: { color: '#22c55e', width: 2.5, shape: 'linear' },
+          fill: 'tozeroy',
+          fillcolor: 'rgba(34,197,94,0.25)',
+          hovertemplate: '%{x|%d %b %Y}<br>Accrued P&L: ₹%{y:,.2f}<extra></extra>',
+          name: 'Profit'
+        },
+        {
+          x,
+          y: loss,
+          type: 'scatter',
+          mode: 'lines',
+          connectgaps: false,
+          line: { color: '#ef4444', width: 2.5, shape: 'linear' },
+          fill: 'tozeroy',
+          fillcolor: 'rgba(239,68,68,0.25)',
+          hovertemplate: '%{x|%d %b %Y}<br>Accrued P&L: ₹%{y:,.2f}<extra></extra>',
+          name: 'Loss'
+        },
+        {
+          x,
+          y,
+          type: 'scatter',
+          mode: 'lines',
+          line: { color: '#cbd5e1', width: 1.5, dash: 'dot', shape: 'linear' },
+          hoverinfo: 'skip',
+          showlegend: false,
+          name: 'Trend'
+        },
+        {
+          x: eventX,
+          y: eventY,
+          type: 'scatter',
+          mode: 'markers',
+          marker: { size: 9, color: eventColors, line: { width: 1.5, color: '#f8fafc' } },
+          text: eventText,
+          hovertemplate: '%{text}<extra></extra>',
+          name: 'Events'
+        }
+      ], {
+        ...plotTheme,
+        yaxis: { ...plotTheme.yaxis, title: 'Accrued P&L (₹)', zerolinecolor: '#94a3b8', zerolinewidth: 1.5 },
+        xaxis: { ...plotTheme.xaxis, title: 'Date', tickmode: 'array', tickvals: tickVals, ticktext: tickText },
+        legend: { orientation: 'h', y: 1.12, x: 0 }
+      }, { responsive: true, displayModeBar: false });
+    }
+
+    function renderYearHeatmap(yearRow) {
+      if (!yearRow) return;
+      const fyStartYear = Number(String(yearRow.year).slice(0, 4));
+      const container = document.getElementById('heatmap');
+      const dayMap = new Map(yearRow.daily.map(d => [dateKey(d.date), d.value]));
+      const monthLabels = ['APR','MAY','JUNE','JULY','AUG','SEPT','OCT','NOV','DEC','JAN','FEB','MAR'];
+      const months = [3,4,5,6,7,8,9,10,11,0,1,2];
+      const cellSize = 14;
+      const cellGap = 3;
+
+      const colorForValue = (value) => {
+        if (value == null || Number.isNaN(value) || value === 0) return '#e5e7eb';
+        if (value < 0) {
+          const mag = Math.min(Math.abs(value), 100000);
+          if (mag > 50000) return '#ff0000';
+          if (mag > 20000) return '#f87171';
+          return '#fca5a5';
+        }
+        const mag = Math.min(value, 100000);
+        if (mag > 50000) return '#22c55e';
+        if (mag > 20000) return '#86efac';
+        return '#bbf7d0';
+      };
+
+      const monthBlocks = months.map((month, idx) => {
+        const year = month >= 3 ? fyStartYear : fyStartYear + 1;
+        const first = new Date(year, month, 1);
+        const last = new Date(year, month + 1, 0);
+        const firstWeekday = (first.getDay() + 6) % 7;
+        const dayCells = [];
+        for (let i = 0; i < firstWeekday; i++) dayCells.push(null);
+        for (let day = 1; day <= last.getDate(); day++) {
+          const d = new Date(year, month, day);
+          const weekday = (d.getDay() + 6) % 7;
+          if (weekday > 4) continue;
+          dayCells.push(d);
+        }
+        while (dayCells.length % 5 !== 0) dayCells.push(null);
+        const cols = Math.max(1, Math.ceil(dayCells.length / 5));
+        const cells = [];
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < 5; r++) {
+            const cellDate = dayCells[c * 5 + r] || null;
+            const value = cellDate ? dayMap.get(dateKey(cellDate)) : null;
+            const tip = cellDate ? `${cellDate.toLocaleDateString('en-IN')} • ${value == null ? 'No trade' : money(value)}` : '';
+            cells.push(`<div title="${tip}" style="width:${cellSize}px;height:${cellSize}px;border-radius:2px;background:${colorForValue(value)};"></div>`);
+          }
+        }
+        return `
+          <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">
+            <div style="display:grid; grid-auto-flow:column; grid-template-rows:repeat(5,${cellSize}px); gap:${cellGap}px;">${cells.join('')}</div>
+            <div style="font-size:11px; color:#cbd5e1; letter-spacing:.04em;">${monthLabels[idx]}</div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = `<div style="display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:10px; align-items:start; width:100%;">${monthBlocks.join('')}</div>`;
+    }
+
+    function renderCharts(years, allDays) {
+      Plotly.newPlot('yearlyBar', [{
+        x: years.map(r => r.year),
+        y: years.map(r => r.netProfit),
+        type: 'bar',
+        marker: { color: years.map(r => r.netProfit >= 0 ? '#22c55e' : '#ef4444') },
+        text: years.map(r => money(r.netProfit)),
+        textposition: 'outside'
+      }], { ...plotTheme, yaxis: { ...plotTheme.yaxis, title: 'Net Profit (₹)' } }, { responsive: true, displayModeBar: false });
+
+      Plotly.newPlot('investVsProfit', [
+        { x: years.map(r => r.year), y: years.map(r => Number.isFinite(r.invested) ? r.invested : null), type: 'bar', name: 'Invested', marker: { color: '#60a5fa' } },
+        { x: years.map(r => r.year), y: years.map(r => r.netProfit), type: 'bar', name: 'Net Profit', marker: { color: '#f59e0b' } },
+        { x: years.map(r => r.year), y: years.map(r => r.turnover), type: 'bar', name: 'Turnover', marker: { color: '#a78bfa' } }
+      ], { ...plotTheme, barmode: 'group', yaxis: { ...plotTheme.yaxis, title: '₹' } }, { responsive: true, displayModeBar: false });
+
+      Plotly.newPlot('returnBar', [{
+        x: years.map(r => r.year),
+        y: years.map(r => Number.isFinite(r.returnPct) ? r.returnPct : null),
+        type: 'bar',
+        marker: { color: years.map(r => (Number.isFinite(r.returnPct) && r.returnPct >= 0) ? '#22c55e' : '#ef4444') },
+        text: years.map(r => pct(r.returnPct)),
+        textposition: 'outside'
+      }], { ...plotTheme, yaxis: { ...plotTheme.yaxis, title: 'Return %' } }, { responsive: true, displayModeBar: false });
+
+      renderTimeChartTabs(years);
+      renderYearTimeChart(years.find(r => r.year === selectedTimeChartYear) || years[0]);
+      renderHeatmapTabs(years);
+      renderYearHeatmap(years.find(r => r.year === selectedHeatmapYear) || years[0]);
+    }
+
+    function renderSettingsTable(years) {
+      const body = document.getElementById('settingsBody');
+      body.innerHTML = years.map(year => `
+        <tr>
+          <td>${year}</td>
+          <td><input data-year="${year}" type="number" step="0.01" value="${investmentSettings[year] ?? ''}" style="width:220px; background:#0f172a; color:#e8eefc; border:1px solid var(--border); border-radius:10px; padding:10px 12px;" placeholder="Enter invested amount" /></td>
+        </tr>
+      `).join('');
+
+      const eventBody = document.getElementById('eventSettingsBody');
+      eventBody.innerHTML = years.map(year => `
+        <tr>
+          <td>${year}</td>
+          <td><textarea data-event-year="${year}" style="width:100%; min-width:340px; min-height:92px; background:#0f172a; color:#e8eefc; border:1px solid var(--border); border-radius:10px; padding:10px 12px; resize:vertical;" placeholder="2024-06-04 | India election result | green\n2024-10-01 | Iran war scare | red">${eventSettings[year] ?? ''}</textarea></td>
+        </tr>
+      `).join('');
+    }
+
+    function renderFromRawData(allTrades, pnlByYear, statusText='Dashboard generated.') {
+      const yearsAvailable = [...new Set([...Object.keys(allTrades), ...Object.keys(pnlByYear)])].sort();
+      if (!yearsAvailable.length) {
+        document.getElementById('status').textContent = 'Could not parse any usable tradebook / P&L files.';
+        return;
+      }
+      latestRawData = { allTrades, pnlByYear };
+      renderSettingsTable(yearsAvailable);
+      latestAnalytics = buildAnalytics(allTrades, pnlByYear);
+      renderSummary(latestAnalytics.years);
+      renderCharts(latestAnalytics.years, latestAnalytics.allDays);
+      renderInsights(latestAnalytics.years, latestAnalytics.allDays);
+      document.getElementById('status').textContent = statusText;
+    }
+
+    async function handleFiles(fileList) {
+      const allFiles = [...fileList];
+      const files = allFiles.filter(f => /\.xls/i.test(f.name));
+      const jsonFiles = allFiles.filter(f => /\.json$/i.test(f.name));
+
+      if (jsonFiles.length) {
+        const sidecar = jsonFiles.find(f => /fno.*\.json$/i.test(f.name)) || jsonFiles[0];
+        try {
+          const text = await sidecar.text();
+          const parsed = JSON.parse(text);
+          if (parsed && parsed.allTrades && parsed.pnlByYear) {
+            Object.assign(investmentSettings, parsed.investmentSettings || {});
+            Object.assign(eventSettings, parsed.eventSettings || {});
+            localStorage.setItem('fnoInvestmentSettings', JSON.stringify(investmentSettings));
+            localStorage.setItem('fnoEventSettings', JSON.stringify(eventSettings));
+            renderFromRawData(parsed.allTrades, parsed.pnlByYear, `Loaded dashboard data from ${sidecar.name}.`);
+            return;
+          }
+        } catch (err) {
+          document.getElementById('status').textContent = `Failed to load JSON: ${err.message}`;
+          return;
+        }
+      }
+
+      if (!files.length) {
+        document.getElementById('status').textContent = 'No Excel files selected.';
+        return;
+      }
+      document.getElementById('status').textContent = `Reading ${files.length} file(s)…`;
+      const allTrades = {};
+      const pnlByYear = {};
+      const errors = [];
+
+      for (const file of files) {
+        try {
+          const buf = await readFileAsArrayBuffer(file);
+          const wb = XLSX.read(buf, { type: 'array' });
+          const kind = detectKind(file.name);
+          if (kind === 'tradebook') {
+            const trades = parseTradebook(wb, file.name);
+            if (!trades.length) throw new Error(`No trades parsed from ${file.name}`);
+            const year = fyFromDate(trades[0].tradeDate);
+            allTrades[year] = dedupeTrades([...(allTrades[year] || []), ...trades]);
+          } else if (kind === 'pnl') {
+            const pnl = parsePnl(wb, file.name);
+            if (!pnl.year) throw new Error(`Could not derive financial year from ${file.name}`);
+            pnlByYear[pnl.year] = pnl;
+          } else {
+            errors.push(`Skipped ${file.name} (unknown file type)`);
+          }
+        } catch (err) {
+          errors.push(`${file.name}: ${err.message}`);
+        }
+      }
+
+      renderFromRawData(allTrades, pnlByYear, errors.length
+        ? `Done with ${errors.length} warning(s): ${errors.join(' • ')}`
+        : `Dashboard generated for ${[...new Set([...Object.keys(allTrades), ...Object.keys(pnlByYear)])].length} year(s).`);
+    }
+
+    function downloadJsonState() {
+      if (!latestRawData) {
+        document.getElementById('status').textContent = 'Nothing to save yet. Load files first.';
+        return;
+      }
+      const payload = {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        allTrades: latestRawData.allTrades,
+        pnlByYear: latestRawData.pnlByYear,
+        investmentSettings,
+        eventSettings
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'fno_dashboard_data.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+      document.getElementById('status').textContent = 'JSON data file saved.';
+    }
+
+    async function handleJsonFile(file) {
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (!parsed || !parsed.allTrades || !parsed.pnlByYear) throw new Error('Invalid dashboard JSON format');
+        Object.keys(investmentSettings).forEach(k => delete investmentSettings[k]);
+        Object.keys(eventSettings).forEach(k => delete eventSettings[k]);
+        Object.assign(investmentSettings, parsed.investmentSettings || {});
+        Object.assign(eventSettings, parsed.eventSettings || {});
+        localStorage.setItem('fnoInvestmentSettings', JSON.stringify(investmentSettings));
+        localStorage.setItem('fnoEventSettings', JSON.stringify(eventSettings));
+        renderFromRawData(parsed.allTrades, parsed.pnlByYear, `Loaded dashboard data from ${file.name}.`);
+      } catch (err) {
+        document.getElementById('status').textContent = `Failed to load JSON: ${err.message}`;
+      }
+    }
+
+    document.getElementById('files').addEventListener('change', (e) => handleFiles(e.target.files));
+    document.getElementById('jsonFile').addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) handleJsonFile(e.target.files[0]);
+    });
+    document.getElementById('saveJsonBtn').addEventListener('click', downloadJsonState);
+    document.getElementById('loadSample').addEventListener('click', () => {
+      document.getElementById('status').textContent = 'Upload your yearly tradebook and P&L Excel files, or load a previously saved fno_dashboard_data.json file.';
+    });
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      const panel = document.getElementById('settingsPanel');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+    document.getElementById('saveSettings').addEventListener('click', () => {
+      document.querySelectorAll('#settingsBody input[data-year]').forEach(input => {
+        const year = input.getAttribute('data-year');
+        const value = input.value.trim();
+        if (value === '') delete investmentSettings[year];
+        else investmentSettings[year] = Number(value);
+      });
+      document.querySelectorAll('#eventSettingsBody textarea[data-event-year]').forEach(input => {
+        const year = input.getAttribute('data-event-year');
+        const value = input.value.trim();
+        if (value === '') delete eventSettings[year];
+        else eventSettings[year] = value;
+      });
+      localStorage.setItem('fnoInvestmentSettings', JSON.stringify(investmentSettings));
+      localStorage.setItem('fnoEventSettings', JSON.stringify(eventSettings));
+      if (latestAnalytics) {
+        latestAnalytics = {
+          ...latestAnalytics,
+          years: latestAnalytics.years.map(y => {
+            const invested = Number.isFinite(num(investmentSettings[y.year])) ? num(investmentSettings[y.year]) : NaN;
+            return { ...y, invested, returnPct: invested ? (y.netProfit / invested) * 100 : NaN };
+          })
+        };
+        renderSummary(latestAnalytics.years);
+        renderCharts(latestAnalytics.years, latestAnalytics.allDays);
+        renderInsights(latestAnalytics.years, latestAnalytics.allDays);
+      }
+      document.getElementById('status').textContent = 'Settings saved.';
+      document.getElementById('settingsPanel').style.display = 'none';
+    });
+    document.getElementById('clearSettings').addEventListener('click', () => {
+      localStorage.removeItem('fnoInvestmentSettings');
+      localStorage.removeItem('fnoEventSettings');
+      Object.keys(investmentSettings).forEach(k => delete investmentSettings[k]);
+      Object.keys(eventSettings).forEach(k => delete eventSettings[k]);
+      document.querySelectorAll('#settingsBody input[data-year]').forEach(input => input.value = '');
+      document.querySelectorAll('#eventSettingsBody textarea[data-event-year]').forEach(input => input.value = '');
+      if (latestAnalytics) {
+        latestAnalytics = {
+          ...latestAnalytics,
+          years: latestAnalytics.years.map(y => ({ ...y, invested: NaN, returnPct: NaN }))
+        };
+        renderSummary(latestAnalytics.years);
+        renderCharts(latestAnalytics.years, latestAnalytics.allDays);
+        renderInsights(latestAnalytics.years, latestAnalytics.allDays);
+      }
+      document.getElementById('status').textContent = 'Saved settings cleared.';
+    });
+  </script>
+</body>
+</html>
